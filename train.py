@@ -21,10 +21,10 @@ import os
 import sys
 import deepdish.io as io
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('pdf')
 import matplotlib.pyplot as plt
 from keras.callbacks import EarlyStopping, ModelCheckpoint
-from keras.utils import plot_model
+#from keras.utils import plot_model
 from sklearn.preprocessing import LabelEncoder
 from viz import add_curve, calculate_roc, ROC_plotter
 import cPickle
@@ -53,15 +53,16 @@ def main(hdf5_paths, n_train, n_test, n_validate, model_id):
                     np.random.shuffle(ix)
                     X, X_trk, y, w = X[ix], X_trk[ix], y[ix], w[ix]
                 for i in xrange(int(np.ceil(X.shape[0] / float(batch_size)))):
+#                    print X[(i * batch_size):((i+1)*batch_size)].shape
                     yield (
                         [
                             X[(i * batch_size):((i+1)*batch_size)], 
                             X_trk[(i * batch_size):((i+1)*batch_size)] 
                         ], 
-                        [y[(i * batch_size):((i+1)*batch_size)]] * 3, 
+                        [y[(i * batch_size):((i+1)*batch_size)]] * 3,
                         [ 
-                            0.4 * w[(i * batch_size):((i+1)*batch_size)],
-                            0.4 * w[(i * batch_size):((i+1)*batch_size)],
+                            w[(i * batch_size):((i+1)*batch_size)],
+                            w[(i * batch_size):((i+1)*batch_size)],
                             w[(i * batch_size):((i+1)*batch_size)]
                         ]
                     )
@@ -72,10 +73,10 @@ def main(hdf5_paths, n_train, n_test, n_validate, model_id):
 
     net = build_model(*get_n_vars(train_paths))
     net.summary()
-    plot_model(net,
-               to_file='model.png',
-               show_shapes=True,
-               show_layer_names=False)
+ #   plot_model(net,
+ #              to_file='model.png',
+ #              show_shapes=True,
+ #              show_layer_names=False)
     net.compile('adam', 'sparse_categorical_crossentropy')
 
     weights_path = model_id + '.h5'
@@ -126,6 +127,7 @@ def main(hdf5_paths, n_train, n_test, n_validate, model_id):
         batch(test_paths, 2048, random=False),
         steps=int(np.ceil(n_test/2048.)),
         verbose=1)
+    np.save('yhat-{}.npy'.format(model_id), yhat) 
 
     test = [extract(filepath, ['pt', 'y', 'mv2c10']) for filepath in test_paths]
 
@@ -137,75 +139,77 @@ def main(hdf5_paths, n_train, n_test, n_validate, model_id):
 
     test = reduce(dict_reduce, test)
     test = {k : v[:yhat[-1].shape[0]] for k, v in test.iteritems()}
-
+    
     print 'Plotting...'
     # -- for now, we only care about the final prediction
     _ = performance(yhat[-1], test['y'], test['mv2c10'], model_id)
 
     # -- Performance by pT
-    # print 'Plotting performance in bins of pT...'
-    # #pt_bins = [0, 50000, 100000, 150000, 200000, 300000, 500000, max(test['pt'])+1]
-    # pt_bins = np.linspace(min(test['pt']), max(test['pt']), 5)
-    # bn = np.digitize(test['pt'], pt_bins)
-    # from collections import OrderedDict
-    # rej_at_70 = OrderedDict()
+    print 'Plotting performance in bins of pT...'
+    pt_bins = [0, 50000, 100000, 150000, 300000, 500000, max(test['pt'])+1]
+    #pt_bins = np.linspace(min(test['pt']), max(test['pt']), 5)
+    bn = np.digitize(test['pt'], pt_bins)
+    from collections import OrderedDict
+    rej_at_70 = OrderedDict()
 
-    # for b in np.unique(bn):
-    #     rej_at_70.update(
-    #         performance(
-    #             yhat[-1][bn == b],
-    #             test['y'][bn == b],
-    #             test['mv2c10'][bn == b],
-    #             '{}-{}GeV'.format(pt_bins[b-1]/1000, pt_bins[b]/1000)
-    #         )
-    #     )
+    for b in np.unique(bn):
+        rej_at_70.update(
+            performance(
+                yhat[-1][bn == b],
+                test['y'][bn == b],
+                test['mv2c10'][bn == b],
+                model_id,
+                #'bin{}'.format(b)
+                '{}-{}GeV'.format(pt_bins[b-1]/1000, pt_bins[b]/1000)
+            )
+        )
 
-    # # -- find center of each bin:
-    # bins_mean = [(pt_bins[i]+pt_bins[i+1])/2 for i in range(len(pt_bins)-1)]
-    # # -- horizontal error bars of lenght = bin length: 
-    # xerr = [bins_mean[i]-pt_bins[i+1] for i in range(len(bins_mean))]
+    # -- find center of each bin:
+    bins_mean = [(pt_bins[i]+pt_bins[i+1])/2 for i in range(len(pt_bins)-1)]
+    # -- horizontal error bars of lenght = bin length: 
+    xerr = [bins_mean[i]-pt_bins[i+1] for i in range(len(bins_mean))]
 
-    # plt.clf()
-    # _ = plt.errorbar(
-    #     bins_mean, 
-    #     [rej_at_70[k]['MST_70_bl'] for k in rej_at_70.keys()],
-    #     xerr=xerr,
-    #     #yerr=np.sqrt(bin_heights), 
-    #     fmt='o', capsize=0, color='green', label='MST', alpha=0.7)
-    # _ = plt.errorbar(
-    #     bins_mean, 
-    #     [rej_at_70[k]['MV2_70_bl'] for k in rej_at_70.keys()],
-    #     xerr=xerr,
-    #     #yerr=np.sqrt(bin_heights), 
-    #     fmt='o', capsize=0, color='red', label='MV2c10', alpha=0.7)
-    # plt.legend()
-    # plt.title('b vs. l rejection at 70% efficiency in pT bins')
-    # plt.yscale('log')
-    # plt.xlabel(r'$p_{T, \mathrm{jet}} \ \mathrm{MeV}$')
-    # plt.ylabel('Background rejection at 70% efficiency')
-    # plt.xlim(xmax=1000000)
-    # plt.savefig('pt_bl.pdf')
-
-    # plt.clf()
-    # _ = plt.errorbar(
-    #     bins_mean, 
-    #     [rej_at_70[k]['MST_70_bc'] for k in rej_at_70.keys()],
-    #     xerr=xerr,
-    #     #yerr=np.sqrt(bin_heights), 
-    #     fmt='o', capsize=0, color='green', label='MST', alpha=0.7)
-    # _ = plt.errorbar(
-    #     bins_mean,
-    #     [rej_at_70[k]['MV2_70_bc'] for k in rej_at_70.keys()],
-    #     xerr=xerr,
-    #     #yerr=np.sqrt(bin_heights), 
-    #     fmt='o', capsize=0, color='red', label='MV2c10', alpha=0.7)
-    # plt.legend()
-    # plt.title('b vs. c rejection at 70% efficiency in pT bins')
-    # plt.xlabel(r'$p_{T, \mathrm{jet}} \ \mathrm{MeV}$')
-    # plt.ylabel('Background rejection at 70% efficiency')
-    # plt.yscale('log')
-    # plt.xlim(xmax=1000000)
-    # plt.savefig('pt_bc.pdf')
+    plt.clf()
+    _ = plt.errorbar(
+        bins_mean, 
+        [rej_at_70[k]['pluris_70_bl'] for k in rej_at_70.keys()],
+        xerr=xerr,
+        #yerr=np.sqrt(bin_heights), 
+        fmt='o', capsize=0, color='green', label='pluris', alpha=0.7)
+    _ = plt.errorbar(
+        bins_mean, 
+        [rej_at_70[k]['MV2_70_bl'] for k in rej_at_70.keys()],
+        xerr=xerr,
+        #yerr=np.sqrt(bin_heights), 
+        fmt='o', capsize=0, color='red', label='MV2c10', alpha=0.7)
+    plt.legend()
+    plt.title('b vs. l rejection at 70% efficiency in pT bins')
+    plt.yscale('log')
+    plt.xlabel(r'$p_{T, \mathrm{jet}} \ \mathrm{MeV}$')
+    plt.ylabel('Background rejection at 70% efficiency')
+    plt.xlim(xmax=1000000)
+    plt.savefig('pt_bl.pdf')
+    
+    plt.clf()
+    _ = plt.errorbar(
+        bins_mean, 
+        [rej_at_70[k]['pluris_70_bc'] for k in rej_at_70.keys()],
+        xerr=xerr,
+        #yerr=np.sqrt(bin_heights), 
+        fmt='o', capsize=0, color='green', label='pluris', alpha=0.7)
+    _ = plt.errorbar(
+        bins_mean,
+        [rej_at_70[k]['MV2_70_bc'] for k in rej_at_70.keys()],
+        xerr=xerr,
+        #yerr=np.sqrt(bin_heights), 
+        fmt='o', capsize=0, color='red', label='MV2c10', alpha=0.7)
+    plt.legend()
+    plt.title('b vs. c rejection at 70% efficiency in pT bins')
+    plt.xlabel(r'$p_{T, \mathrm{jet}} \ \mathrm{MeV}$')
+    plt.ylabel('Background rejection at 70% efficiency')
+    plt.yscale('log')
+    plt.xlim(xmax=1000000)
+    plt.savefig('pt_bc.pdf')
 
     
 # -----------------------------------------------------------------
@@ -261,7 +265,7 @@ def performance(yhat, y, mv2c10, model_id, extratitle=''):
 
     fin1 = np.isfinite(np.log(yhat[:, 2] / yhat[:, 0])[bl_sel])
     bl_curves = {}
-    add_curve(r'MST', 'green', 
+    add_curve(r'pluris', 'green', 
           calculate_roc( y[bl_sel][fin1] == 5, np.log(yhat[:, 2] / yhat[:, 0])[bl_sel][fin1]),
           bl_curves)
     add_curve(r'MV2c10', 'red', 
@@ -269,12 +273,12 @@ def performance(yhat, y, mv2c10, model_id, extratitle=''):
           bl_curves)
     cPickle.dump(bl_curves, open('ROC_' + model_id + '_test_bl.pkl', 'wb'), cPickle.HIGHEST_PROTOCOL)
 
-    fg = ROC_plotter(bl_curves, title=r'MST vs MV2c10 '+ extratitle, min_eff = 0.5, max_eff=1.0, logscale=True, ymax = 10000)
+    fg = ROC_plotter(bl_curves, title=r'pluris vs MV2c10 '+ extratitle, min_eff = 0.5, max_eff=1.0, logscale=True, ymax = 10000)
     fg.savefig('ROC_' + model_id + '_' + extratitle +'_test_bl.pdf')
 
     fin1 = np.isfinite(np.log(yhat[:, 2] / yhat[:, 1])[bc_sel])
     bc_curves = {}
-    add_curve(r'MST', 'green', 
+    add_curve(r'pluris', 'green', 
           calculate_roc( y[bc_sel][fin1] == 5, np.log(yhat[:, 2] / yhat[:, 1])[bc_sel][fin1]),
           bc_curves)
     add_curve(r'MV2c10', 'red', 
@@ -282,7 +286,7 @@ def performance(yhat, y, mv2c10, model_id, extratitle=''):
           bc_curves)
     cPickle.dump(bc_curves, open('ROC_' + model_id + '_test_bc.pkl', 'wb'), cPickle.HIGHEST_PROTOCOL)
 
-    fg = ROC_plotter(bc_curves, title=r'MST vs MV2c10 ' + extratitle, min_eff = 0.5, max_eff=1.0, logscale=True, ymax = 100)
+    fg = ROC_plotter(bc_curves, title=r'pluris vs MV2c10 ' + extratitle, min_eff = 0.5, max_eff=1.0, logscale=True, ymax = 100)
     fg.savefig('ROC_' + model_id + '_' + extratitle +'_test_bc.pdf')
     plt.close(fg)
 
@@ -291,8 +295,8 @@ def performance(yhat, y, mv2c10, model_id, extratitle=''):
 
     return {extratitle : 
         {
-            'MST_70_bl' : bl_curves[r'MST']['rejection'][find_nearest(bl_curves[r'MST']['efficiency'], 0.7)],
-            'MST_70_bc' : bc_curves[r'MST']['rejection'][find_nearest(bc_curves[r'MST']['efficiency'], 0.7)],
+            'pluris_70_bl' : bl_curves[r'pluris']['rejection'][find_nearest(bl_curves[r'pluris']['efficiency'], 0.7)],
+            'pluris_70_bc' : bc_curves[r'pluris']['rejection'][find_nearest(bc_curves[r'pluris']['efficiency'], 0.7)],
             'MV2_70_bl' : bl_curves[r'MV2c10']['rejection'][find_nearest(bl_curves[r'MV2c10']['efficiency'], 0.7)],
             'MV2_70_bc' : bc_curves[r'MV2c10']['rejection'][find_nearest(bc_curves[r'MV2c10']['efficiency'], 0.7)]
         }
