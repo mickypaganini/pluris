@@ -21,7 +21,7 @@ Other requirements can be satified with `pip install tqdm pandas numpy scikit-le
 ## How To Run
 
 1. Get access to simulated ttbar samples identified by the tag `group.perf-flavtag` which contain track level information.
-2. Construct the feature matrices `X` and `X_trk`, target array `y`, and weights array `w` using `dataprocessing.py`.
+2. Construct the feature matrices `X` and `X_trk`, target array `y`, and weights array `w` using [`dataprocessing.py`](dataprocessing.py).
 This will produce HDF5 files containing a dictionary for training, validating and final testing.
 The remaining scripts will use the `.h5` output produced here. 
 The variables that will be inserted in the final dataset are specified in [`variables.yaml`](variables.yaml).
