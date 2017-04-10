@@ -340,7 +340,7 @@ if __name__ == '__main__':
     # Look at the yaml file in this directory for an example
     parser.add_argument('--variables',
         type=str, help="path to the yaml file containing lists named\
-        'branches', 'training_vars', 'rnnip_training_vars'") # my design choice
+        'branches', 'training_vars', 'trk_vars'") # my design choice
     parser.add_argument('--model_id',
         help="token to identify the model",
         default='')
