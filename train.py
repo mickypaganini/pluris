@@ -14,7 +14,6 @@ Example:
 '''
 
 import pandas as pd
-import pandautils as pup
 import numpy as np
 import math
 import os
