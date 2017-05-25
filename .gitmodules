@@ -1,0 +1,3 @@
+[submodule "YaleATLAS"]
+	path = YaleATLAS
+	url = https://github.com/mickypaganini/YaleATLAS
